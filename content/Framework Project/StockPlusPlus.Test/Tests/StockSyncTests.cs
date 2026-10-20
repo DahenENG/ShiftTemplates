@@ -175,13 +175,85 @@ public class StockSyncTests
         Assert.Contains("Name is required.", reasons);
         Assert.Contains("Quantity cannot be negative.", reasons);
         Assert.Contains("ExternalCode is required.", reasons);
-        Assert.Contains(reasons, r => r.StartsWith("Rejected by the database:"));
+        Assert.Contains("A value is too long for its column.", reasons);
+
+        // Failures go back to API callers: a short reason, never SQL Server's message with table and column names.
+        Assert.DoesNotContain(reasons, r => r.Contains("SyncedStocks") || r.Contains("truncated"));
 
         // Failed rows are settled, not retried forever: the next run has nothing to do.
         var again = await WithSync(sync => sync.RunAsync(feed, batchSize: 100, CancellationToken.None));
         Assert.Equal(StockSyncRunStatus.Completed, again.Status);
         Assert.Equal(0, again.ProcessedThisRun);
         Assert.Equal(0, again.FailedThisRun);
+    }
+
+    [Fact]
+    public async Task Fixed_ATemporaryDatabaseError_LeavesTheRowPending_AndTheNextRunFinishesIt()
+    {
+        var feed = await SeedAsync(1_000);
+
+        // A deadlock or lock timeout can't be produced on cue, so the interceptor makes SQL Server raise an error
+        // (THROW 50001) for every write that touches SKU-00500. Only duplicate key, truncation and NULL-into-NOT-NULL
+        // are permanent; any other error must leave the row Pending, not mark it Failed forever.
+        var temporaryFailure = new TemporaryFailureInterceptor("SKU-00500");
+        var first = await WithSync(temporaryFailure, sync => sync.RunAsync(feed, batchSize: 100, CancellationToken.None));
+
+        Assert.Equal(StockSyncRunStatus.Completed, first.Status);
+        Assert.Equal(999, first.ProcessedThisRun);
+        Assert.Equal(0, first.FailedThisRun);
+        Assert.Equal(1, first.LeftPendingThisRun);
+        Assert.Equal(0, first.Failed);
+        Assert.Equal(1, first.Remaining);
+        Assert.Equal(2, temporaryFailure.Raised); // the batch save, then the row on its own: tried once in this run
+        Assert.Equal(1, await CountRowsAsync(feed, StockSyncRowStatus.Pending));
+
+        // The error has passed: the next run picks the row up.
+        var second = await WithSync(sync => sync.RunAsync(feed, batchSize: 100, CancellationToken.None));
+
+        Assert.Equal(StockSyncRunStatus.Completed, second.Status);
+        Assert.Equal(1, second.ProcessedThisRun);
+        Assert.Equal(1_000, second.Done);
+        Assert.Equal(0, second.Remaining);
+    }
+
+    // Why the run reads with a keyset cursor. The same 1,000 rows, where SKU-00500 keeps hitting a temporary error and
+    // so stays Pending, read three ways:
+    //   - "the first 100 Pending rows" again and again re-reads that row forever: only the batch cap stops it;
+    //   - OFFSET over the Pending rows ends, but has skipped half the feed: processed rows leave the set it counts in;
+    //   - the keyset cursor reads every row once and finishes with only the stuck row left for the next run.
+    [Fact]
+    public async Task Paging_ARowThatStaysPending_SpinsTheFirstPendingLoop_OffsetSkipsRows_KeysetFinishes()
+    {
+        var queueFeed = await SeedAsync(1_000);
+        var queue = await WithSync(new TemporaryFailureInterceptor("SKU-00500"),
+            sync => sync.RunAsync(queueFeed, batchSize: 100, CancellationToken.None, paging: StockSyncPaging.FirstPending, maxBatches: 50));
+        Log($"First-pending loop: {queue.Status} after {queue.Batches} batches, done {queue.Done}, remaining {queue.Remaining}");
+
+        Assert.Equal(StockSyncRunStatus.BatchLimitReached, queue.Status);
+        Assert.Equal(50, queue.Batches);              // 11 batches do all the work; 39 more read only the stuck row
+        Assert.Equal(999, queue.Done);
+        Assert.Equal(1, queue.Remaining);
+
+        var offsetFeed = await SeedAsync(1_000);
+        var offset = await WithSync(new TemporaryFailureInterceptor("SKU-00500"),
+            sync => sync.RunAsync(offsetFeed, batchSize: 100, CancellationToken.None, paging: StockSyncPaging.Offset, maxBatches: 50));
+        Log($"Offset loop: {offset.Status} after {offset.Batches} batches, done {offset.Done}, remaining {offset.Remaining}");
+
+        Assert.Equal(StockSyncRunStatus.Completed, offset.Status);
+        Assert.Equal(5, offset.Batches);
+        Assert.Equal(500, offset.Done);               // rows 100-199, 300-399, 500-599, 700-799, 900-999 never read
+        Assert.Equal(500, offset.Remaining);
+
+        var keysetFeed = await SeedAsync(1_000);
+        var keyset = await WithSync(new TemporaryFailureInterceptor("SKU-00500"),
+            sync => sync.RunAsync(keysetFeed, batchSize: 100, CancellationToken.None, maxBatches: 50));
+        Log($"Keyset: {keyset.Status} after {keyset.Batches} batches, done {keyset.Done}, remaining {keyset.Remaining}");
+
+        Assert.Equal(StockSyncRunStatus.Completed, keyset.Status);
+        Assert.Equal(10, keyset.Batches);
+        Assert.Equal(999, keyset.Done);
+        Assert.Equal(1, keyset.LeftPendingThisRun);
+        Assert.Equal(1, keyset.Remaining);
     }
 
     [Fact]
@@ -305,6 +377,40 @@ public class StockSyncTests
             }
 
             return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    // Makes SQL Server refuse every write that carries the given ExternalCode with a non-permanent error number, the
+    // way a deadlock or lock timeout would. THROW runs on the server, so the sync sees a real SqlException.
+    private sealed class TemporaryFailureInterceptor(string externalCode) : DbCommandInterceptor
+    {
+        public int Raised { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default)
+        {
+            Inject(command);
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(
+            DbCommand command, CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            Inject(command);
+            return base.NonQueryExecutingAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void Inject(DbCommand command)
+        {
+            var isWrite = command.CommandText.Contains("INSERT", StringComparison.OrdinalIgnoreCase)
+                || command.CommandText.Contains("UPDATE", StringComparison.OrdinalIgnoreCase)
+                || command.CommandText.Contains("MERGE", StringComparison.OrdinalIgnoreCase);
+
+            if (isWrite && command.Parameters.Cast<DbParameter>().Any(p => Equals(p.Value, externalCode)))
+            {
+                command.CommandText = "THROW 50001, N'Simulated temporary failure', 1;" + command.CommandText;
+                Raised++;
+            }
         }
     }
 

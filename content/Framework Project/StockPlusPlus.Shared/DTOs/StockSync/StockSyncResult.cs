@@ -16,19 +16,25 @@ public class StockSyncResult
     /// <summary>Rows this run marked as impossible to process.</summary>
     public int FailedThisRun { get; set; }
 
+    /// <summary>Rows a temporary database error (a deadlock, a lock timeout) left Pending. The next run retries them.</summary>
+    public int LeftPendingThisRun { get; set; }
+
+    /// <summary>Batches this run read.</summary>
+    public int Batches { get; set; }
+
     /// <summary>Rows of the feed synced so far, by every run.</summary>
     public int Done { get; set; }
 
     /// <summary>Rows of the feed that can never be processed (see <see cref="Failures"/> for the first few).</summary>
     public int Failed { get; set; }
 
-    /// <summary>Rows of the feed still waiting. 0 when the sync has finished.</summary>
+    /// <summary>Rows of the feed still waiting, including rows a temporary error left for the next run.</summary>
     public int Remaining { get; set; }
 
     /// <summary>The last row this run committed, or null when it committed none.</summary>
     public long? LastCommittedRowId { get; set; }
 
-    /// <summary>Up to 20 of this run's failed rows, with the reason.</summary>
+    /// <summary>Up to 20 of this run's failed rows, with a short reason (never the raw database message).</summary>
     public List<StockSyncFailure> Failures { get; set; } = new();
 }
 
@@ -43,9 +49,13 @@ public class StockSyncFailure
 
 public enum StockSyncRunStatus
 {
-    /// <summary>Every row of the feed is Done or Failed.</summary>
+    /// <summary>The run went through every Pending row. <see cref="StockSyncResult.Remaining"/> counts rows a temporary
+    /// error left for the next run.</summary>
     Completed,
 
     /// <summary>Stopped by its cancellation token. Finished batches are saved; call again to continue.</summary>
     Cancelled,
+
+    /// <summary>Stopped after the caller's maximum number of batches.</summary>
+    BatchLimitReached,
 }

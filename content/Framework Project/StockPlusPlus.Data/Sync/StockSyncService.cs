@@ -18,6 +18,14 @@ namespace StockPlusPlus.Data.Sync;
 /// than one batch still makes progress. A cancelled run reports progress and the next run continues at the first
 /// Pending row; bad rows are marked Failed with a reason and skipped.</item>
 /// </list>
+/// <para>
+/// Reading: a keyset cursor (<c>WHERE ID &gt; @lastId ORDER BY ID</c>, moved past every batch). Trade-off: the cursor
+/// guarantees each run moves forward even when a row stays Pending, but a row left Pending is only retried by the
+/// next run, and the key must be unique, ever-increasing and indexed. Reading "the first N Pending rows" again
+/// instead retries such a row at once, but spins forever on one that never resolves; an OFFSET over the Pending rows
+/// skips rows, because the set shrinks under the offset as the loop works. Both are kept in
+/// <see cref="StockSyncPaging"/> to show this.
+/// </para>
 /// </summary>
 public class StockSyncService
 {
@@ -66,10 +74,14 @@ public class StockSyncService
         string feed,
         int batchSize = DefaultBatchSize,
         CancellationToken cancellationToken = default,
-        IProgress<StockSyncResult>? progress = null)
+        IProgress<StockSyncResult>? progress = null,
+        StockSyncPaging paging = StockSyncPaging.Keyset,
+        int? maxBatches = null)
     {
         batchSize = Math.Clamp(batchSize, 1, MaxBatchSize);
         var result = new StockSyncResult { Feed = feed };
+        long cursor = 0;
+        var rowsRead = 0;
 
         try
         {
@@ -78,16 +90,35 @@ public class StockSyncService
                 // Checked between batches: a cancel that arrives now costs no work at all.
                 cancellationToken.ThrowIfCancellationRequested();
 
-                db.ChangeTracker.Clear();
-                var batch = await PendingRows(feed).OrderBy(x => x.ID).Take(batchSize).ToListAsync(cancellationToken);
-                if (batch.Count == 0)
+                if (result.Batches == maxBatches)
+                {
+                    result.Status = StockSyncRunStatus.BatchLimitReached;
                     break;
+                }
+
+                db.ChangeTracker.Clear();
+                var pending = PendingRows(feed);
+                var page = paging switch
+                {
+                    StockSyncPaging.Keyset => pending.Where(x => x.ID > cursor).OrderBy(x => x.ID),
+                    StockSyncPaging.FirstPending => pending.OrderBy(x => x.ID),
+                    StockSyncPaging.Offset => pending.OrderBy(x => x.ID).Skip(rowsRead),
+                    _ => throw new ArgumentOutOfRangeException(nameof(paging)),
+                };
+                var batch = await page.Take(batchSize).ToListAsync(cancellationToken);
+                if (batch.Count == 0)
+                {
+                    result.Status = StockSyncRunStatus.Completed;
+                    break;
+                }
+
+                result.Batches++;
+                rowsRead += batch.Count;
+                cursor = batch[^1].ID; // past every row read, whether it was committed or left Pending
 
                 await CommitBatchAsync(feed, batch, result, cancellationToken);
                 progress?.Report(result);
             }
-
-            result.Status = StockSyncRunStatus.Completed;
         }
         catch (Exception e) when (cancellationToken.IsCancellationRequested && IsCancellation(e))
         {
@@ -126,8 +157,8 @@ public class StockSyncService
         }
         catch (DbUpdateException)
         {
-            // The database refused a row validation could not foresee. Failing the batch would fail it on every run
-            // too, so find the row: retry this batch one row at a time.
+            // The database refused the batch: a row validation could not foresee, or a temporary error. Failing the
+            // batch would fail it on every run, so retry it one row at a time and judge each row on its own.
             db.ChangeTracker.Clear();
             await CommitRowByRowAsync(feed, batch.Select(x => x.ID).ToList(), result, cancellationToken);
             return;
@@ -156,12 +187,21 @@ public class StockSyncService
             {
                 await db.SaveChangesAsync(CancellationToken.None);
             }
-            catch (DbUpdateException e)
+            catch (DbUpdateException e) when (PermanentReason(e) is { } reason)
             {
+                // A retry can never fix this row: settle it as Failed so the sync can finish.
                 db.ChangeTracker.Clear();
                 row = await db.Set<StockSyncInboxRow>().SingleAsync(x => x.ID == id, CancellationToken.None);
-                MarkFailed(row, "Rejected by the database: " + Innermost(e).Message, now);
+                MarkFailed(row, reason, now);
                 await db.SaveChangesAsync(CancellationToken.None);
+            }
+            catch (DbUpdateException)
+            {
+                // Anything else (a deadlock, a lock timeout, a dropped connection) may pass: leave the row Pending for
+                // the next run. The keyset cursor has already moved past it, so this run doesn't read it again.
+                db.ChangeTracker.Clear();
+                result.LeftPendingThisRun++;
+                continue;
             }
 
             Count([row], result);
@@ -254,6 +294,21 @@ public class StockSyncService
         result.Remaining = CountOf(StockSyncRowStatus.Pending);
     }
 
+    /// <summary>
+    /// A short reason when SQL Server refused the row for good, or null when a retry might succeed. Only these are
+    /// permanent: duplicate key (2627, 2601), value too long (8152, and 2628, its newer form since SQL Server 2019),
+    /// NULL into a NOT NULL column (515). The reason is returned to API callers, so it never carries the server's
+    /// message with table and column names.
+    /// </summary>
+    private static string? PermanentReason(DbUpdateException e)
+        => (Innermost(e) as SqlException)?.Number switch
+        {
+            2627 or 2601 => "Duplicate: another row already has this key.",
+            8152 or 2628 => "A value is too long for its column.",
+            515 => "A required value is missing.",
+            _ => null,
+        };
+
     private static bool IsCancellation(Exception e)
         => e is OperationCanceledException or SqlException || e.InnerException is SqlException or OperationCanceledException;
 
@@ -263,4 +318,23 @@ public class StockSyncService
             e = e.InnerException;
         return e;
     }
+}
+
+/// <summary>How <see cref="StockSyncService.RunAsync"/> reads the next batch.</summary>
+public enum StockSyncPaging
+{
+    /// <summary><c>WHERE ID &gt; @lastId ORDER BY ID</c>: every row is read at most once per run. The default.</summary>
+    Keyset,
+
+    /// <summary>
+    /// The first N Pending rows, again and again (the Day 11 loop). Ends only when every row leaves Pending, so a row
+    /// that stays Pending is read forever. Kept to show why the cursor is needed.
+    /// </summary>
+    FirstPending,
+
+    /// <summary>
+    /// <c>OFFSET rowsRead</c> over the Pending rows. Skips rows, because processed rows leave the set the offset counts
+    /// in. Kept to show why OFFSET fails here.
+    /// </summary>
+    Offset,
 }
