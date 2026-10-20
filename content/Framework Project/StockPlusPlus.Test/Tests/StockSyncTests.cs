@@ -1,10 +1,12 @@
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.DependencyInjection;
 using StockPlusPlus.Data.DbContext;
 using StockPlusPlus.Data.Entities.StockSync;
 using StockPlusPlus.Data.Sync;
 using StockPlusPlus.Shared.DTOs.StockSync;
+using System.Data.Common;
 using System.Net;
 using System.Net.Http.Json;
 
@@ -51,16 +53,18 @@ public class StockSyncTests
         var feed = await SeedAsync(IncidentSize);
         using var cts = new CancellationTokenSource();
 
-        // Cancel shortly after the single big SaveChanges has started, while SQL Server is writing.
-        var stage = new InlineProgress<string>(s => { if (s == "saving") cts.CancelAfter(TimeSpan.FromMilliseconds(100)); });
+        // Cancel the moment SQL Server has executed the save's first write command: rows really were written inside the
+        // transaction when the cancel arrives. Deterministic: no timer, the interceptor decides the exact point.
+        var cancelAfterFirstWrite = new CancelAfterFirstWriteInterceptor(cts);
 
-        var error = await Record.ExceptionAsync(() => WithSync(sync => sync.RunNaiveAsync(feed, cts.Token, stage)));
+        var error = await Record.ExceptionAsync(() => WithSync(cancelAfterFirstWrite, sync => sync.RunNaiveAsync(feed, cts.Token)));
 
         Assert.NotNull(error);
         Assert.True(IsCancellation(error), $"Expected a cancellation, got {error!.GetType().Name}: {error.Message}");
+        Assert.Equal(1, cancelAfterFirstWrite.WritesBeforeCancel);
         Log($"Naive run stopped with {error.GetType().Name}: {Innermost(error).Message}");
 
-        // One transaction: nothing of the run survived, every row is still pending.
+        // One transaction: the rows already written were rolled back with the rest, every row is still pending.
         Assert.Equal(0, await CountTargetsAsync(feed));
         Assert.Equal(IncidentSize, await CountRowsAsync(feed, StockSyncRowStatus.Pending));
 
@@ -118,22 +122,27 @@ public class StockSyncTests
     }
 
     [Fact]
-    public async Task Fixed_CancelledWhileSqlServerIsWriting_RollsBackOnlyThatBatch()
+    public async Task Fixed_CancelledWhileABatchIsBeingSaved_KeepsThatBatch_AndStopsBeforeTheNext()
     {
         const int batchSize = 2_500;
         var feed = await SeedAsync(IncidentSize);
+        var rowIds = await RowIdsAsync(feed);
         using var cts = new CancellationTokenSource();
 
-        // After the first batch commits, cancel 50 ms later: the next batch's SaveChanges is usually in flight.
-        var progress = new InlineProgress<StockSyncResult>(r => { if (r.ProcessedThisRun == batchSize) cts.CancelAfter(50); });
-        var first = await WithSync(sync => sync.RunAsync(feed, batchSize, cts.Token, progress));
+        // Cancel exactly as the 2nd batch's SaveChanges starts. A batch whose write is cut off would be rolled back on
+        // every run that is shorter than one batch (the endpoint's time budget): the original incident again. So the
+        // write finishes, and the run stops before the 3rd batch.
+        var cancelOnSecondSave = new CancelOnSaveInterceptor(cts, onSave: 2);
+        var first = await WithSync(cancelOnSecondSave, sync => sync.RunAsync(feed, batchSize, cts.Token));
         Log($"First run: {first.Status}, done {first.Done}, remaining {first.Remaining}");
 
-        // Wherever the cancel landed, the database never holds part of a batch.
-        Assert.True(first.Status == StockSyncRunStatus.Cancelled || first.Remaining == 0);
-        Assert.Equal(0, first.Done % batchSize);
-        Assert.Equal(first.Done, await CountTargetsAsync(feed));
-        Assert.Equal(IncidentSize - first.Done, first.Remaining);
+        Assert.True(cancelOnSecondSave.Cancelled);
+        Assert.Equal(StockSyncRunStatus.Cancelled, first.Status);
+        Assert.Equal(2 * batchSize, first.ProcessedThisRun);
+        Assert.Equal(2 * batchSize, first.Done);
+        Assert.Equal(IncidentSize - 2 * batchSize, first.Remaining);
+        Assert.Equal(rowIds[2 * batchSize - 1], first.LastCommittedRowId);
+        Assert.Equal(2 * batchSize, await CountTargetsAsync(feed));
 
         var second = await WithSync(sync => sync.RunAsync(feed, batchSize, CancellationToken.None));
         Assert.Equal(StockSyncRunStatus.Completed, second.Status);
@@ -211,6 +220,17 @@ public class StockSyncTests
         return await run(scope.ServiceProvider.GetRequiredService<StockSyncService>());
     }
 
+    // The same, with one extra EF interceptor on the sync's DbContext (the app's own options, plus the interceptor).
+    private async Task<T> WithSync<T>(IInterceptor interceptor, Func<StockSyncService, Task<T>> run)
+    {
+        using var scope = factory.Services.CreateScope();
+        var options = new DbContextOptionsBuilder<DB>(scope.ServiceProvider.GetRequiredService<DbContextOptions<DB>>())
+            .AddInterceptors(interceptor)
+            .Options;
+        await using var db = new DB(options);
+        return await run(new StockSyncService(db));
+    }
+
     private async Task<string> SeedAsync(int count, Action<StockSyncInboxRow, int>? customize = null)
     {
         var feed = "test-" + Guid.NewGuid().ToString("N")[..12];
@@ -266,5 +286,59 @@ public class StockSyncTests
     private sealed class InlineProgress<T>(Action<T> report) : IProgress<T>
     {
         public void Report(T value) => report(value);
+    }
+
+    // Cancels as the Nth SaveChanges starts (before any of its commands is sent).
+    private sealed class CancelOnSaveInterceptor(CancellationTokenSource cts, int onSave) : SaveChangesInterceptor
+    {
+        private int saves;
+
+        public bool Cancelled { get; private set; }
+
+        public override ValueTask<InterceptionResult<int>> SavingChangesAsync(
+            DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
+        {
+            if (++saves == onSave)
+            {
+                cts.Cancel();
+                Cancelled = true;
+            }
+
+            return base.SavingChangesAsync(eventData, result, cancellationToken);
+        }
+    }
+
+    // Cancels right after SQL Server has executed the first INSERT/UPDATE command: the save is part-way through its
+    // transaction when the token fires.
+    private sealed class CancelAfterFirstWriteInterceptor(CancellationTokenSource cts) : DbCommandInterceptor
+    {
+        public int WritesBeforeCancel { get; private set; }
+
+        public override ValueTask<DbDataReader> ReaderExecutedAsync(
+            DbCommand command, CommandExecutedEventData eventData, DbDataReader result, CancellationToken cancellationToken = default)
+        {
+            AfterCommand(command);
+            return base.ReaderExecutedAsync(command, eventData, result, cancellationToken);
+        }
+
+        public override ValueTask<int> NonQueryExecutedAsync(
+            DbCommand command, CommandExecutedEventData eventData, int result, CancellationToken cancellationToken = default)
+        {
+            AfterCommand(command);
+            return base.NonQueryExecutedAsync(command, eventData, result, cancellationToken);
+        }
+
+        private void AfterCommand(DbCommand command)
+        {
+            var isWrite = command.CommandText.Contains("INSERT", StringComparison.OrdinalIgnoreCase)
+                || command.CommandText.Contains("UPDATE", StringComparison.OrdinalIgnoreCase)
+                || command.CommandText.Contains("MERGE", StringComparison.OrdinalIgnoreCase);
+
+            if (isWrite && !cts.IsCancellationRequested)
+            {
+                WritesBeforeCancel++;
+                cts.Cancel();
+            }
+        }
     }
 }

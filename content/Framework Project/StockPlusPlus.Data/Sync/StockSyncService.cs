@@ -13,9 +13,10 @@ namespace StockPlusPlus.Data.Sync;
 /// <item><see cref="RunNaiveAsync"/>: the way the production job was written. Everything in one SaveChanges, so a
 /// cancellation (SqlException "Operation cancelled by user") rolls back ALL of it and every retry starts from zero; one
 /// bad row fails the whole run, every time.</item>
-/// <item><see cref="RunAsync"/>: the fix. Batches, each committed with its rows' Done/Failed marks in one transaction;
-/// a cancelled run reports progress and the next run continues at the first Pending row; bad rows are marked Failed
-/// with a reason and skipped.</item>
+/// <item><see cref="RunAsync"/>: the fix. Batches, each committed with its rows' Done/Failed marks in one transaction.
+/// Cancellation is honoured between batches only: a batch that has started writing always finishes, so a run shorter
+/// than one batch still makes progress. A cancelled run reports progress and the next run continues at the first
+/// Pending row; bad rows are marked Failed with a reason and skipped.</item>
 /// </list>
 /// </summary>
 public class StockSyncService
@@ -35,20 +36,17 @@ public class StockSyncService
 
     /// <summary>
     /// The incident's shape, kept to reproduce it: load every pending row, apply every row, then ONE SaveChanges
-    /// (one transaction) for all of them. Returns how many rows it synced. <paramref name="stage"/> reports
-    /// "applying" and "saving" so a test can cancel while SQL Server is writing.
+    /// (one transaction) for all of them, cancellable mid-write. Returns how many rows it synced.
     /// </summary>
-    public async Task<int> RunNaiveAsync(string feed, CancellationToken cancellationToken, IProgress<string>? stage = null)
+    public async Task<int> RunNaiveAsync(string feed, CancellationToken cancellationToken)
     {
         var rows = await PendingRows(feed).OrderBy(x => x.ID).ToListAsync(cancellationToken);
         var targets = await LoadTargetsAsync(feed, rows, cancellationToken);
         var now = DateTimeOffset.UtcNow;
 
-        stage?.Report("applying");
         foreach (var row in rows)
             Apply(feed, row, targets, now); // no validation: whatever the feed sends is written
 
-        stage?.Report("saving");
         await db.SaveChangesAsync(cancellationToken); // all or nothing: a cancel here loses every row
 
         return rows.Count;
@@ -60,6 +58,7 @@ public class StockSyncService
     /// Syncs the feed in batches of <paramref name="batchSize"/> until no row is Pending or
     /// <paramref name="cancellationToken"/> fires. Each batch's results and its rows' Done/Failed marks are saved
     /// in ONE transaction, so a batch is either fully kept or fully rolled back (and retried by the next run).
+    /// <paramref name="cancellationToken"/> is checked between batches and may stop a read, but never a batch's write.
     /// Cancellation is not an error: the result says <see cref="StockSyncRunStatus.Cancelled"/> and how much is left.
     /// <paramref name="progress"/> is reported after every committed batch.
     /// </summary>
@@ -92,9 +91,9 @@ public class StockSyncService
         }
         catch (Exception e) when (cancellationToken.IsCancellationRequested && IsCancellation(e))
         {
-            // A cancel during a SaveChanges surfaces as SqlException "Operation cancelled by user" (the incident's
-            // error) or as OperationCanceledException. Either way that batch's transaction rolled back; every batch
-            // before it is committed.
+            // Stopped between batches, or during a read (as OperationCanceledException, or SqlException "Operation
+            // cancelled by user" when the read was in flight). No write is ever cut off, so every batch that started
+            // saving is committed.
             result.Status = StockSyncRunStatus.Cancelled;
         }
 
@@ -120,9 +119,12 @@ public class StockSyncService
 
         try
         {
-            await db.SaveChangesAsync(cancellationToken);
+            // Not the caller's token: a cancel that arrives mid-write would roll the batch back, and a run whose budget
+            // is shorter than one batch would then lose that batch on every run (the incident again). The batch is
+            // bounded by MaxBatchSize, and the loop stops at the next ThrowIfCancellationRequested.
+            await db.SaveChangesAsync(CancellationToken.None);
         }
-        catch (DbUpdateException) when (!cancellationToken.IsCancellationRequested)
+        catch (DbUpdateException)
         {
             // The database refused a row validation could not foresee. Failing the batch would fail it on every run
             // too, so find the row: retry this batch one row at a time.
@@ -152,14 +154,14 @@ public class StockSyncService
 
             try
             {
-                await db.SaveChangesAsync(cancellationToken);
+                await db.SaveChangesAsync(CancellationToken.None);
             }
-            catch (DbUpdateException e) when (!cancellationToken.IsCancellationRequested)
+            catch (DbUpdateException e)
             {
                 db.ChangeTracker.Clear();
-                row = await db.Set<StockSyncInboxRow>().SingleAsync(x => x.ID == id, cancellationToken);
+                row = await db.Set<StockSyncInboxRow>().SingleAsync(x => x.ID == id, CancellationToken.None);
                 MarkFailed(row, "Rejected by the database: " + Innermost(e).Message, now);
-                await db.SaveChangesAsync(cancellationToken);
+                await db.SaveChangesAsync(CancellationToken.None);
             }
 
             Count([row], result);
