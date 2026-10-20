@@ -21,17 +21,23 @@ public class SalesOrderStaleStampTests
     }
 
     /// <summary>
-    /// The incident, reproduced. Also a guard: the old stamp IS out of date (the order changed), so the server must keep
-    /// refusing it — a stale form that were accepted would send the line back uncancelled and undo the action.
+    /// The trap, documented: this test passes before AND after the fix (IsSuccessStatusCode accepts the old 204 and the
+    /// new 200). It is a guard, not the red-then-green test: the old stamp IS out of date (the order changed), so the
+    /// server must keep refusing it. A stale form that were accepted would send the line back uncancelled and undo the
+    /// action. It first proves its own premise: after the action the stored stamp differs from the form's.
     /// </summary>
     [Fact]
     public async Task Reproduction_AFormThatKeepsItsCopyAfterTheLineAction_Gets409OnItsNextEdit()
     {
         using var client = factory.CreateClient();
         var form = await CreateOrderAsync(client);
+        var formStamp = form.LastSaveDate;
 
-        using (var action = await client.PostAsync(CancelUrl(form, line: 1), null, Ct))
+        using (var action = await client.PostAsync(CancelUrl(form, "Delivery"), null, Ct))
             Assert.True(action.IsSuccessStatusCode, $"The action failed: {(int)action.StatusCode}");
+
+        var stored = await Entity<SalesOrderDTO>(await client.GetAsync($"api/SalesOrder/{form.ID}", Ct), HttpStatusCode.OK);
+        Assert.NotEqual(formStamp, stored.LastSaveDate); // the action really moved the order's stamp
 
         // The user keeps editing the copy the form loaded before the action.
         form.Notes = "Deliver on Monday";
@@ -52,16 +58,16 @@ public class SalesOrderStaleStampTests
         var loadedStamp = form.LastSaveDate;
 
         // The action answers with the current order, and the form replaces its copy with it.
-        form = await Entity<SalesOrderDTO>(await client.PostAsync(CancelUrl(form, line: 1), null, Ct), HttpStatusCode.OK);
+        form = await Entity<SalesOrderDTO>(await client.PostAsync(CancelUrl(form, "Delivery"), null, Ct), HttpStatusCode.OK);
         Assert.True(form.LastSaveDate > loadedStamp);
-        Assert.True(form.Lines[1].IsCancelled);
+        Assert.True(Line(form, "Delivery").IsCancelled);
         Assert.Equal(20m, form.Total);
 
         form.Notes = "Deliver on Monday";
         var saved = await Entity<SalesOrderDTO>(await client.PutAsJsonAsync($"api/SalesOrder/{form.ID}", form, Ct), HttpStatusCode.OK);
 
         Assert.Equal("Deliver on Monday", saved.Notes);
-        Assert.True(saved.Lines[1].IsCancelled); // the action's change survived the edit
+        Assert.True(Line(saved, "Delivery").IsCancelled); // the action's change survived the edit
         Assert.Equal(20m, saved.Total);
     }
 
@@ -72,7 +78,7 @@ public class SalesOrderStaleStampTests
         using var client = factory.CreateClient();
         var form = await CreateOrderAsync(client);
 
-        form = await Entity<SalesOrderDTO>(await client.PostAsync(CancelUrl(form, line: 1), null, Ct), HttpStatusCode.OK);
+        form = await Entity<SalesOrderDTO>(await client.PostAsync(CancelUrl(form, "Delivery"), null, Ct), HttpStatusCode.OK);
 
         var otherTab = await Entity<SalesOrderDTO>(await client.GetAsync($"api/SalesOrder/{form.ID}", Ct), HttpStatusCode.OK);
         otherTab.Notes = "Changed in another tab";
@@ -87,7 +93,10 @@ public class SalesOrderStaleStampTests
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private static string CancelUrl(SalesOrderDTO order, int line) => $"api/SalesOrder/{order.ID}/lines/{order.Lines[line].ID}/cancel";
+    private static string CancelUrl(SalesOrderDTO order, string line) => $"api/SalesOrder/{order.ID}/lines/{Line(order, line).ID}/cancel";
+
+    // Lines are found by their description: a PUT re-adds them with new IDs, and the query has no OrderBy.
+    private static SalesOrderLineDTO Line(SalesOrderDTO order, string description) => order.Lines.Single(x => x.Description == description);
 
     // An order with two lines: 2 × 10 and 1 × 5, Total 25. Returned as the form loads it.
     private static async Task<SalesOrderDTO> CreateOrderAsync(HttpClient client)

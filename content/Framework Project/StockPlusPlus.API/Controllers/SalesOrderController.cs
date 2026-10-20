@@ -51,6 +51,9 @@ public class SalesOrderController : ShiftEntitySecureControllerAsync<SalesOrderR
         line.IsCancelled = true;     // the child
         order.RecalculateTotal();    // ...and the parent
 
+        // One SaveChangesAsync: the line and the order are saved atomically, and the repository's sweep stamps both.
+        // The action deliberately takes no LastSaveDate from the client, so it never answers 409 itself: it acts on the
+        // order as stored, and the form learns the new version from the answer below.
         await repository.SaveChangesAsync();
 
         return Ok(new ShiftEntityResponse<SalesOrderDTO>(await repository.ViewAsync(order)));
