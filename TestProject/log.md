@@ -570,6 +570,7 @@ Sarmad Ahmed commented on Week 4 (landing page review, "fix before the walkthrou
 ### Done 2026-10-20
 - CONTRIBUTING.md: https://github.com/ShiftSoftware/ShiftFrameworkDocumentation/pull/4 (branch `contributing-guide`, from master). Setup next to ShiftTemplates, DocPageMeta (nav + search), snippets, Docs.Verify scripts, status + TestedAgainst, pre-PR checklist. Every fact checked against master; docs solution builds with 0 errors and only CONTRIBUTING.md changes.
 - This log published on my ShiftTemplates fork, branch `internship-log` (TestProject/ is git-ignored, so it isn't on any PR branch). Added the note on why the Day 3/4 work slipped (end of Week 1).
+- Landing page (commit fb1ea91): Docs #4 card + Docs I wrote entry, "Ten pull requests", links to this log (PR section, timeline, footer), timeline entry for 20 October.
 - Landing page repo history rewritten (force-push, 2026-10-20): all three commits now hold only the cleaned images and video; the final files are unchanged. New hashes b3d8cdd, 14afcbc, 09144ed.
 
 ### Still to do
