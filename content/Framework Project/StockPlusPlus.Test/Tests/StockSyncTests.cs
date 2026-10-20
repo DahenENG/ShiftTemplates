@@ -190,6 +190,18 @@ public class StockSyncTests
         Assert.Equal(0, result.Remaining);
     }
 
+    [Fact]
+    public async Task Endpoint_TheNaiveSyncIsNotExposed()
+    {
+        var feed = await SeedAsync(10);
+        using var client = factory.CreateClient();
+
+        using var response = await client.PostAsync($"api/stock-sync/{feed}/naive", null, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.Equal(10, await CountRowsAsync(feed, StockSyncRowStatus.Pending));
+    }
+
     // ───────────────────────────── helpers ─────────────────────────────
 
     // A fresh scope (and DbContext) per call, like a request: no state leaks between runs.

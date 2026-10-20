@@ -29,9 +29,8 @@ public static class StockSyncEndpoints
             return Results.Ok(result);
         });
 
-        // POST api/stock-sync/{feed}/naive — the incident's version, kept to reproduce it. Do not copy.
-        group.MapPost("{feed}/naive", async (string feed, StockSyncService sync, CancellationToken requestAborted) =>
-            Results.Ok(new { Processed = await sync.RunNaiveAsync(feed, requestAborted) }));
+        // The incident's naive version (StockSyncService.RunNaiveAsync) has no endpoint on purpose: the tests call it
+        // directly, and a running app should never offer the known-bad sync to its users.
 
         return endpoints;
     }
