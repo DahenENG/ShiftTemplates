@@ -60,6 +60,11 @@ public class Invoice : ShiftEntity<Invoice>,
     public long? CityID { get; set; }
     public long? CountryID { get; set; }
 
+    // Incident B diagnosis: a stored total of the lines, which a line-level action recalculates. Not on the DTOs; it
+    // exists so ConcurrencyDiagnosisTests can show a child save that also changes its parent (weakness 2).
+    [Precision(18, 2)]
+    public decimal? LinesTotal { get; set; }
+
     // IHasAttention — framework-maintained summary columns
     public bool HasActiveAttention { get; set; }
     public AttentionSeverity? HighestSeverity { get; set; }

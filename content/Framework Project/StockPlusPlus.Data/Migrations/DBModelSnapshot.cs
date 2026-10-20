@@ -2432,6 +2432,10 @@ namespace StockPlusPlus.Data.Migrations
                     b.Property<long?>("LastSavedByUserID")
                         .HasColumnType("bigint");
 
+                    b.Property<decimal?>("LinesTotal")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("ManualReference")
                         .HasColumnType("nvarchar(max)");
 
