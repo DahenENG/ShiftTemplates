@@ -135,6 +135,9 @@ builder.Services.AddHttpClient();
 // One explicit host opt-in installs the v2 engine and its seven standard marker dimensions. The Vehicle repository
 // replaces the standard single-key Companies dimension with a two-key owner-or-intermediary rule.
 builder.Services.AddShiftEntityDataLevelAccess();
+
+// Incident A sample: a resumable, cancellable sync (Data/Sync/StockSyncService, Endpoints/StockSyncEndpoints).
+builder.Services.AddScoped<StockPlusPlus.Data.Sync.StockSyncService>();
 #endif
 
 //builder.Services.AddScoped<IFileExplorerAccessControl, FileManagerAccessControl>();
@@ -418,6 +421,7 @@ app.MapShiftTaggingEndpoints<DB>();
 // MapShiftEntitySecureCrud / RequireTypeAuth* extensions end-to-end.
 app.MapProductMinimalApi();
 app.MapSampleContactMinimalApi();
+app.MapStockSyncEndpoints();
 #endif
 
 app.UseCors(x => x.WithOrigins("*").AllowAnyMethod().AllowAnyHeader());
