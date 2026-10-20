@@ -92,6 +92,8 @@
             "**/StockPlusPlus.Data/ReplicationModels/*.cs",
             "**/StockPlusPlus.Data/Repositories/*/**",
             "**/StockPlusPlus.Data/Repositories/*.cs",
+            "**/StockPlusPlus.Data/Sync/*/**",
+            "**/StockPlusPlus.Data/Sync/*.cs",
             "**/StockPlusPlus.Functions/Functions/*/**",
             "**/StockPlusPlus.Functions/Functions/*.cs",
             "**/StockPlusPlus.Shared/ActionTrees/SystemActionTrees.cs",
