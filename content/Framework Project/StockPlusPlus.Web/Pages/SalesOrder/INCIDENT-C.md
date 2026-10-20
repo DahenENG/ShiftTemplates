@@ -1,0 +1,7 @@
+# Incident C: where the fix belongs
+
+1. **Now (app layer):** an action that changes the order must answer with the order as it now is (same shape as GET) and the form must take that version — `SalesOrderController.CancelLine` returns it, `SalesOrderForm` rebuilds the form; the conflict check stays strict.
+2. **Not by loosening the check:** the form's old copy is genuinely out of date — accepting its stamp would send the line back as not cancelled and undo the action, because child stamps are never compared and the lines are replaced on save.
+3. **Long run (framework):** the cause is shared, so the fix belongs there — `ShiftEntityForm` needs a public way to take a new version after an action (today `SetValue`/`FetchItem` are internal, so apps rebuild the form), and a framework action helper should return the updated root by default.
+4. **Also framework:** `UpsertAsync` stamps the root on every save, even when only a child or nothing changed (diagnosis weaknesses 1–2), and nothing but the root stamp is compared (3–4); stamping only real changes plus a database-checked version (rowversion / EF concurrency token, per aggregate) would stop nested saves from invalidating forms without hiding real conflicts.
+5. **Why both:** the app fix is small, local and needed today; but every app with actions on child records hits the same trap, so the default must change in the framework, where the stamping and the form live.

@@ -2816,6 +2816,94 @@ namespace StockPlusPlus.Data.Migrations
                             }));
                 });
 
+            modelBuilder.Entity("StockPlusPlus.Data.Entities.SalesOrder", b =>
+                {
+                    b.Property<long>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasJsonPropertyName("ID");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ID"));
+
+                    b.Property<DateTimeOffset>("CreateDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long?>("CreatedByUserID")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("CustomerName")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("LastSaveDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long?>("LastSavedByUserID")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<decimal>("Total")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("ID");
+
+                    b.ToTable("SalesOrders");
+                });
+
+            modelBuilder.Entity("StockPlusPlus.Data.Entities.SalesOrderLine", b =>
+                {
+                    b.Property<long>("ID")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasJsonPropertyName("ID");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("ID"));
+
+                    b.Property<DateTimeOffset>("CreateDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long?>("CreatedByUserID")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsCancelled")
+                        .HasColumnType("bit");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("bit");
+
+                    b.Property<DateTimeOffset>("LastSaveDate")
+                        .HasColumnType("datetimeoffset");
+
+                    b.Property<long?>("LastSavedByUserID")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("int");
+
+                    b.Property<long>("SalesOrderID")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("decimal(18,2)");
+
+                    b.HasKey("ID");
+
+                    b.HasIndex("SalesOrderID");
+
+                    b.ToTable("SalesOrderLines");
+                });
+
             modelBuilder.Entity("StockPlusPlus.Data.Entities.SampleContact", b =>
                 {
                     b.Property<long>("ID")
@@ -3284,6 +3372,17 @@ namespace StockPlusPlus.Data.Migrations
                     b.Navigation("ProductCategory");
                 });
 
+            modelBuilder.Entity("StockPlusPlus.Data.Entities.SalesOrderLine", b =>
+                {
+                    b.HasOne("StockPlusPlus.Data.Entities.SalesOrder", "SalesOrder")
+                        .WithMany("Lines")
+                        .HasForeignKey("SalesOrderID")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("SalesOrder");
+                });
+
             modelBuilder.Entity("StockPlusPlus.Data.Entities.SampleContactPhone", b =>
                 {
                     b.HasOne("StockPlusPlus.Data.Entities.SampleContact", "SampleContact")
@@ -3360,6 +3459,11 @@ namespace StockPlusPlus.Data.Migrations
             modelBuilder.Entity("StockPlusPlus.Data.Entities.ProductCategory", b =>
                 {
                     b.Navigation("Products");
+                });
+
+            modelBuilder.Entity("StockPlusPlus.Data.Entities.SalesOrder", b =>
+                {
+                    b.Navigation("Lines");
                 });
 
             modelBuilder.Entity("StockPlusPlus.Data.Entities.SampleContact", b =>

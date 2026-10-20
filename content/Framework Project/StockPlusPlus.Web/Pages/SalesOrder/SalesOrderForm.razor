@@ -1,0 +1,70 @@
+@attribute [Route($"/{nameof(SalesOrderForm)}/{{Key?}}")]
+
+@using StockPlusPlus.Shared.DTOs.SalesOrder
+@inject HttpClient Http
+@inject ISnackbar Snackbar
+
+@* Incident C sample: the order form, its lines, and a "Cancel line" action that changes a line AND the order. *@
+<ShiftEntityForm @key="formVersion"
+                 T="SalesOrderDTO"
+                 @bind-Value="order"
+                 @bind-Key="Key"
+                 Endpoint="SalesOrder"
+                 Title="Sales order"
+                 TypeAuthAction="StockPlusPlus.Shared.ActionTrees.StockPlusPlusActionTree.SalesOrder">
+
+    <MudTextFieldExtended Label="Customer" @bind-Value="context.Item.CustomerName" For="@(() => context.Item.CustomerName)" />
+    <MudTextFieldExtended Label="Notes" @bind-Value="context.Item.Notes" For="@(() => context.Item.Notes)" />
+    <MudText Class="mt-2"><b>Total:</b> @context.Item.Total.ToString("N2")</MudText>
+
+    <MudSimpleTable Dense Class="mt-2">
+        <thead><tr><th>Line</th><th>Quantity</th><th>Unit price</th><th></th></tr></thead>
+        <tbody>
+            @foreach (var line in context.Item.Lines)
+            {
+                <tr>
+                    <td>@line.Description</td>
+                    <td>@line.Quantity</td>
+                    <td>@line.UnitPrice.ToString("N2")</td>
+                    <td>
+                        @if (line.IsCancelled)
+                        {
+                            <MudChip T="string" Size="Size.Small">Cancelled</MudChip>
+                        }
+                        else if (context.Mode == FormModes.View && line.ID is not null)
+                        {
+                            <MudButton Size="Size.Small" Color="Color.Warning" OnClick="() => CancelLineAsync(line)">Cancel line</MudButton>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </MudSimpleTable>
+</ShiftEntityForm>
+
+@code {
+    [Parameter]
+    public object? Key { get; set; }
+
+    private SalesOrderDTO order = new();
+
+    // Changing @key makes Blazor build a new ShiftEntityForm, which loads the order as it now is.
+    private int formVersion;
+
+    private async Task CancelLineAsync(SalesOrderLineDTO line)
+    {
+        using var response = await Http.PostAsync($"SalesOrder/{Key}/lines/{line.ID}/cancel", null);
+        if (!response.IsSuccessStatusCode)
+        {
+            Snackbar.Add($"The line could not be cancelled ({(int)response.StatusCode}).", Severity.Error);
+            return;
+        }
+
+        // The action changed the order too (Total, LastSaveDate). Holding on to the copy loaded before it would make
+        // the next save fail with a 409 (Incident C). The action answers with the current order; ShiftEntityForm has no
+        // public way to take a new version, so the form is rebuilt and loads the current one.
+        var current = await response.Content.ReadFromJsonAsync<ShiftSoftware.ShiftEntity.Model.ShiftEntityResponse<SalesOrderDTO>>();
+        order = current?.Entity ?? order;
+        formVersion++;
+    }
+}
