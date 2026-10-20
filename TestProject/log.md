@@ -598,5 +598,5 @@ All three branches rebased onto master 2026.10.15.1 (migrations regenerated on t
 **Docs #2** (concurrency guide), same lessons carried over: the recipe saves batches with `CancellationToken.None` (SQL Express run: before 100 of 200 kept, after 200) and stores short reasons (before: the full truncation message with table, column and value); the Incident C example now uses `@bind-Value`. 547 stays permanent in the recipe because there any other error stops the run. Comment on the PR.
 
 ### Still to do
-- Landing page: "Incidents I reproduced" (A, B, C with red → green test output and commit links) — after the Week 3 fixes below.
+- Landing page: "Incidents I reproduced" — done (commit 26d4b4d): A, B, C cards with before/after runs, commit lists and links to week3-evidence; checked at 390 px (no overflow) and every link returns 200.
 - Week 3 feedback: done (above).
