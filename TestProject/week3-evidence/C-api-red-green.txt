@@ -1,0 +1,16 @@
+== RED: CancelLine reverted to the original 'return NoContent();'
+  Failed StockPlusPlus.Test.Tests.SalesOrderStaleStampTests.AfterTheLineAction_AnEditBySomeoneElse_StillCausesA409 [4 s]
+   Expected 200, got 204: 
+  Failed StockPlusPlus.Test.Tests.SalesOrderStaleStampTests.AfterTheLineAction_TheFormHoldsTheCurrentOrder_SoTheNextEditSucceeds [17 ms]
+   Expected 200, got 204: 
+  Passed StockPlusPlus.Test.Tests.SalesOrderStaleStampTests.Reproduction_AFormThatKeepsItsCopyAfterTheLineAction_Gets409OnItsNextEdit [32 ms]
+Total tests: 3
+     Passed: 1
+     Failed: 2
+
+== GREEN: CancelLine answers 200 with the current order
+  Passed StockPlusPlus.Test.Tests.SalesOrderStaleStampTests.AfterTheLineAction_AnEditBySomeoneElse_StillCausesA409 [4 s]
+  Passed StockPlusPlus.Test.Tests.SalesOrderStaleStampTests.AfterTheLineAction_TheFormHoldsTheCurrentOrder_SoTheNextEditSucceeds [22 ms]
+  Passed StockPlusPlus.Test.Tests.SalesOrderStaleStampTests.Reproduction_AFormThatKeepsItsCopyAfterTheLineAction_Gets409OnItsNextEdit [20 ms]
+Total tests: 3
+     Passed: 3

@@ -1,0 +1,4 @@
+== Old Diagnosis2 with the line change deleted (tabA.InvoiceLines[0].Price = 15 commented out):
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis2_SavingAChildRecord_ChangesTheParentsStamp_SoAHeaderEditElsewhereGets409 [5 s]
+Total tests: 1
+-> still passes: the 409 comes from UpsertAsync re-stamping the root on every PUT (weakness 1), not from the child.

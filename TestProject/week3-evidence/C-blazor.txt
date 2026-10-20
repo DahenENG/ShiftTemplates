@@ -1,0 +1,24 @@
+== First probe (page still rebuilt the form with @key), test asserted a second GET:
+== M1: line 67 (order = current?.Entity ?? order) deleted
+  Passed StockPlusPlus.Web.Tests.SalesOrderFormTests.AfterCancelLine_TheFormReloadsTheOrder_AndItsNextSaveCarriesTheNewStamp [958 ms]
+== M2: formVersion++ deleted (no rebuild)
+  Failed StockPlusPlus.Web.Tests.SalesOrderFormTests.AfterCancelLine_TheFormReloadsTheOrder_AndItsNextSaveCarriesTheNewStamp [872 ms]
+   Assert.Equal() Failure: Values differ
+Expected: 2
+Actual:   1
+== M3: both deleted
+  Failed StockPlusPlus.Web.Tests.SalesOrderFormTests.AfterCancelLine_TheFormReloadsTheOrder_AndItsNextSaveCarriesTheNewStamp [30 s]
+---- Assert.Equal() Failure: Values differ
+Expected: 2026-10-20T09:01:00.0000000+00:00
+Actual:   2026-10-20T12:00:00.0000000+03:00
+     at Bunit.RenderedComponentWaitForHelperExtensions.WaitForAssertion[TComponent](IRenderedComponent`1 renderedComponent, Action assertion, Nullable`1 timeout) in /_/src/bunit/Extensions/WaitForHelp
+   at Bunit.Extensions.WaitForHelpers.WaitForAssertionHelper`1.<>c__DisplayClass6_0.<.ctor>b__0() in /_/src/bunit/Extensions/WaitForHelpers/WaitForAssertionHelper.cs:line 35
+
+   Probe: no rebuild, line 67 kept, second-GET check skipped -> Passed: the assignment alone is the fix.
+
+== Final page (form takes the action's answer via @bind-Value). Mutation: assignment removed ->
+  Failed StockPlusPlus.Web.Tests.SalesOrderFormTests.AfterCancelLine_TheFormTakesTheActionsAnswer_AndItsNextSaveCarriesTheNewStamp [30 s]
+---- Assert.Equal() Failure: Values differ
+Expected: 2026-10-20T09:01:00.0000000+00:00
+Actual:   2026-10-20T12:00:00.0000000+03:00
+     at Bunit.RenderedComponentWaitForHelperExtensions.WaitForAssertion[TComponent](IRenderedComponent`1 renderedComponent, Action assertion, Nullable`1 timeout) in /_/src/bunit/Extensions/WaitForHelp

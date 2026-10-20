@@ -1,0 +1,13 @@
+== BEFORE (naive endpoint mapped)
+[xUnit.net 00:00:05.66]       Assert.Equal() Failure: Values differ
+[xUnit.net 00:00:05.66]       Expected: NotFound
+[xUnit.net 00:00:05.66]       Actual:   OK
+  Failed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_TheNaiveSyncIsNotExposed [4 s]
+   Assert.Equal() Failure: Values differ
+Expected: NotFound
+Actual:   OK
+Total tests: 1
+     Failed: 1
+
+== AFTER
+Passed!  - Failed:     0, Passed:     2, Skipped:     0, Total:     2, Duration: 5 s - StockPlusPlus.Test.dll (net10.0)

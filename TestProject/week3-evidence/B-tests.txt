@@ -1,0 +1,27 @@
+== Old Diagnosis4 with A's SaveChangesAsync removed:
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis4_TwoSavesThatBothPassTheConflictCheck_BothCommit_AndOneEditIsSilentlyLost [4 s]
+Total tests: 1
+-> still passes: it never proved A's edit was committed.
+
+== New tests (7/7):
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Observation_TwoSavesFromTheSameVersion_ThatChangeDifferentScalarColumns_BothSurvive [3 s]
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis2_Control_AChildOnlySave_LeavesTheParentsStampAlone [1 s]
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis1b_AnInvoiceSavedWithNoEdit_AlsoMovesTheStamp_SoAHeaderEditElsewhereGets409 [48 ms]
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis2_AChildSaveThatRecalculatesTheParentTotal_MovesTheParentsStamp_SoAHeaderEditElsewhereGets409 [29 ms]
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis3_VersionStampsOnChildDtos_AreNeverCompared_SoAStaleLineSilentlyOverwritesANewerOne [61 ms]
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis4_TwoSavesThatBothPassTheConflictCheck_BothCommit_AndOneEditIsSilentlyLost [13 ms]
+  Passed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis1_ASaveThatChangesNothing_MovesTheStamp_SoEveryOtherOpenTabGets409 [70 ms]
+Total tests: 7
+     Passed: 7
+
+== Mutations on the new tests (each must FAIL):
+   Diagnosis2 with no line change (price stays 10); Diagnosis4 with A's save removed
+  Failed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis2_AChildSaveThatRecalculatesTheParentTotal_MovesTheParentsStamp_SoAHeaderEditElsewhereGets409 [5 s]
+   Assert.True() Failure
+Expected: True
+Actual:   False
+  Failed StockPlusPlus.Test.Tests.ConcurrencyDiagnosisTests.Diagnosis4_TwoSavesThatBothPassTheConflictCheck_BothCommit_AndOneEditIsSilentlyLost [33 ms]
+   Assert.Equal() Failure: Strings differ
+Expected: "CODE-A"
+Actual:   "CODE-0"
+Total tests: 2

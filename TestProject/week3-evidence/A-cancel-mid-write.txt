@@ -1,0 +1,27 @@
+== BEFORE (batch saved with the caller's token)
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Naive_CancelledWhileSaving_LosesEverything_AndTheRetryStartsFromZero [7 s]
+  Failed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_CancelledWhileABatchIsBeingSaved_KeepsThatBatch_AndStopsBeforeTheNext [1 s]
+   Assert.Equal() Failure: Values differ
+Expected: 5000
+Actual:   2500
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Naive_OneRowTheDatabaseRefuses_FailsTheWholeSync_OnEveryRun [738 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.OperationCancelledByUser_IsWhatSqlServerSaysWhenTheTokenFiresDuringACommand [226 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_TheNaiveSyncIsNotExposed [734 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_RunsTheSync_AndAnswersWithTheResult [148 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_RowsThatCanNeverBeProcessed_AreSkippedWithAReason_AndTheSyncFinishes [420 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_CancelledMidRun_KeepsFinishedBatches_ReportsWhatIsLeft_AndTheNextRunResumes [1 s]
+Total tests: 8
+     Passed: 7
+     Failed: 1
+
+== AFTER (batch saved with CancellationToken.None)
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Naive_CancelledWhileSaving_LosesEverything_AndTheRetryStartsFromZero [6 s]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_CancelledWhileABatchIsBeingSaved_KeepsThatBatch_AndStopsBeforeTheNext [2 s]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Naive_OneRowTheDatabaseRefuses_FailsTheWholeSync_OnEveryRun [604 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.OperationCancelledByUser_IsWhatSqlServerSaysWhenTheTokenFiresDuringACommand [220 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_TheNaiveSyncIsNotExposed [728 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_RunsTheSync_AndAnswersWithTheResult [150 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_RowsThatCanNeverBeProcessed_AreSkippedWithAReason_AndTheSyncFinishes [441 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_CancelledMidRun_KeepsFinishedBatches_ReportsWhatIsLeft_AndTheNextRunResumes [1 s]
+Total tests: 8
+     Passed: 8

@@ -1,0 +1,10 @@
+== AFTER (Data/Sync excluded), includeSampleApp=false
+Data/Sync in generated project: 
+StockSync files: 
+    0 Error(s)
+Build succeeded.
+== AFTER, includeSampleApp=true --addTest true
+Data/Sync in generated project: StockSyncService.cs 
+StockSync files: ./MyApp.API/Endpoints/StockSyncEndpoints.cs ./MyApp.Data/Entities/StockSync ./MyApp.Data/Entities/StockSync/StockSyncInboxRow.cs ./MyApp.Data/Sync/StockSyncService.cs ./MyApp.Shared/DTOs/StockSync ./MyApp.Shared/DTOs/StockSync/StockSyncResult.cs ./MyApp.Test/Tests/StockSyncTests.cs 
+    0 Error(s)
+Build succeeded.

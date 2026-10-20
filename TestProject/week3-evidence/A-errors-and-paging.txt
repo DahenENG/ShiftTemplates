@@ -1,0 +1,38 @@
+== BEFORE (any DbUpdateException marks the row Failed, raw SQL message as reason)
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Naive_CancelledWhileSaving_LosesEverything_AndTheRetryStartsFromZero [6 s]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_CancelledWhileABatchIsBeingSaved_KeepsThatBatch_AndStopsBeforeTheNext [3 s]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Naive_OneRowTheDatabaseRefuses_FailsTheWholeSync_OnEveryRun [682 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.OperationCancelledByUser_IsWhatSqlServerSaysWhenTheTokenFiresDuringACommand [218 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_TheNaiveSyncIsNotExposed [703 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_RunsTheSync_AndAnswersWithTheResult [152 ms]
+  Failed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_RowsThatCanNeverBeProcessed_AreSkippedWithAReason_AndTheSyncFinishes [403 ms]
+   Assert.Contains() Failure: Item not found in collection
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_CancelledMidRun_KeepsFinishedBatches_ReportsWhatIsLeft_AndTheNextRunResumes [1 s]
+  Failed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_ATemporaryDatabaseError_LeavesTheRowPending_AndTheNextRunFinishesIt [332 ms]
+   Assert.Equal() Failure: Values differ
+Expected: 0
+Actual:   1
+Total tests: 9
+     Passed: 7
+     Failed: 2
+
+== AFTER (only 2627/2601/8152/2628/515 are permanent; short reasons; keyset cursor)
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Naive_CancelledWhileSaving_LosesEverything_AndTheRetryStartsFromZero [7 s]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_CancelledWhileABatchIsBeingSaved_KeepsThatBatch_AndStopsBeforeTheNext [3 s]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Naive_OneRowTheDatabaseRefuses_FailsTheWholeSync_OnEveryRun [573 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.OperationCancelledByUser_IsWhatSqlServerSaysWhenTheTokenFiresDuringACommand [221 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_TheNaiveSyncIsNotExposed [715 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Endpoint_RunsTheSync_AndAnswersWithTheResult [138 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_RowsThatCanNeverBeProcessed_AreSkippedWithAReason_AndTheSyncFinishes [360 ms]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_CancelledMidRun_KeepsFinishedBatches_ReportsWhatIsLeft_AndTheNextRunResumes [1 s]
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Fixed_ATemporaryDatabaseError_LeavesTheRowPending_AndTheNextRunFinishesIt [313 ms]
+Total tests: 9
+     Passed: 9
+
+== Paging demonstration (one row that stays Pending, 1,000 rows, batches of 100, cap 50)
+  Passed StockPlusPlus.Test.Tests.StockSyncTests.Paging_ARowThatStaysPending_SpinsTheFirstPendingLoop_OffsetSkipsRows_KeysetFinishes [6 s]
+ First-pending loop: BatchLimitReached after 50 batches, done 999, remaining 1
+ Offset loop: Completed after 5 batches, done 500, remaining 500
+ Keyset: Completed after 10 batches, done 999, remaining 1
+Total tests: 1
+     Passed: 1

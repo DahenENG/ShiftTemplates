@@ -1,0 +1,15 @@
+== BEFORE (Data/Sync not excluded), includeSampleApp=false
+Data/Sync in generated project: StockSyncService.cs 
+StockSync files: ./MyApp.Data/Sync/StockSyncService.cs 
+    17 Error(s)
+Build FAILED.
+<generated>/MyApp.Data\Sync\StockSyncService.cs(107,59): error CS0246: The type or namespace name 'StockSyncInboxRow' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(107,85): error CS0246: The type or namespace name 'StockSyncResult' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(137,76): error CS0246: The type or namespace name 'StockSyncResult' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(171,24): error CS0246: The type or namespace name 'StockSyncInboxRow' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(174,107): error CS0246: The type or namespace name 'StockSyncInboxRow' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(174,43): error CS0246: The type or namespace name 'SyncedStock' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(184,37): error CS0246: The type or namespace name 'StockSyncInboxRow' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(184,79): error CS0246: The type or namespace name 'SyncedStock' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(203,37): error CS0246: The type or namespace name 'StockSyncInboxRow' could not be found (are you missing a using directive or an assembly reference?) 
+<generated>/MyApp.Data\Sync\StockSyncService.cs(214,36): error CS0246: The type or namespace name 'StockSyncInboxRow' could not be found (are you missing a using directive or an assembly reference?) 

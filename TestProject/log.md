@@ -574,6 +574,29 @@ Sarmad Ahmed commented on Week 4 (landing page review, "fix before the walkthrou
 - Landing page (commit fb1ea91): Docs #4 card + Docs I wrote entry, "Ten pull requests", links to this log (PR section, timeline, footer), timeline entry for 20 October.
 - Landing page repo history rewritten (force-push, 2026-10-20): all three commits now hold only the cleaned images and video; the final files are unchanged. New hashes b3d8cdd, 14afcbc, 09144ed.
 
+### Week 3 review fixes (2026-10-20)
+
+All three branches rebased onto master 2026.10.15.1 (migrations regenerated on top), force-pushed to my fork. Every fix has a red run before it and a green run after; outputs are in `TestProject/week3-evidence/` next to this log. Full suite on each branch: only the same 6 known failures as master.
+
+**Incident A** (`week3-incident-a-sync`, 4 new commits):
+- Template: `--includeSampleApp false` kept `Data/Sync/StockSyncService.cs` without its entities → 17 × CS0246. Added the two excludes; both variants now build (checked by installing the template from the tree into a private hive).
+- Naive endpoint removed; new test: 404 and no row touched (before: 200).
+- Batches (and the row-by-row fallback) save with `CancellationToken.None`. Timer-based tests replaced by interceptors: the naive test cancels right after the first INSERT/UPDATE ran; the fixed test cancels as batch 2 starts saving and asserts exactly 5,000 kept (before: 2,500).
+- Keyset reading (`WHERE ID > @lastId ORDER BY ID`) + only 2627/2601/8152/2628/515 mark a row Failed, with short reasons; anything else leaves it Pending. These go together: once a row can stay Pending, the old "first 500 Pending" loop reads it forever. Demonstration test, same feed with one row that keeps failing (THROW 50001 injected): first-pending loop hits the 50-batch cap; OFFSET ends after 5 batches with 500 rows never read; keyset finishes in 10 batches with only that row left. 2628 added because SQL Server 2019+ reports truncation as 2628, not 8152.
+
+**Incident B** (`week3-incident-b-concurrency`, 1 new commit, 7 tests):
+- Old test 2 still passed with the line change deleted (checked): it showed weakness 1. Now: a line-level action through the repository (no PUT, no UpsertAsync) that also recalculates the invoice's stored `LinesTotal` → the sweep stamps the invoice → 409; a control without the total leaves the invoice stamp alone; Diagnosis1b = the old scenario, named for what it shows. Invoice got a nullable `LinesTotal` (migration adds only that column) because the sample had no stored parent total.
+- Test 4 passed even with A's save removed (checked). Now reads back CODE-A and the stamp after A, and asserts B landed on top of it.
+- "Different fields survive" narrowed to scalar columns and backed by an Observation test.
+- My own new test 2 first passed without a line change too (LinesTotal started empty); fixed by seeding the correct total with ExecuteUpdate (no stamp). Mutations: no line change → fails; A's save removed → fails.
+
+**Incident C** (`week3-incident-c-stale-stamp`, 1 new commit):
+- Trap test says it passes before and after, and proves the stamp moved. Lines found by Description. Red run with the controller back on `NoContent()`: fix test and guard fail ("Expected 200, got 204").
+- New bUnit test for the Blazor side. Writing it showed the review premise and my Day 14 note were both wrong: the form follows a new `Value` from its parent and `EditItem` snapshots it, so `order = current.Entity` alone is the fix and the `@key` rebuild was the redundant part. The page now uses the action's answer (no second GET); the test fails if the page ignores it.
+- INCIDENT-C.md stands alone (weaknesses spelled out, ClearAttentionResponse precedent, what's tested, the correction).
+
+**Docs #2** (concurrency guide), same lessons carried over: the recipe saves batches with `CancellationToken.None` (SQL Express run: before 100 of 200 kept, after 200) and stores short reasons (before: the full truncation message with table, column and value); the Incident C example now uses `@bind-Value`. 547 stays permanent in the recipe because there any other error stops the run. Comment on the PR.
+
 ### Still to do
 - Landing page: "Incidents I reproduced" (A, B, C with red → green test output and commit links) — after the Week 3 fixes below.
-- Week 3 feedback: Incident A (keyset pagination + naive-loop test, save batches with CancellationToken.None, only permanent SQL errors mark Failed + short reasons, deterministic cancel tests via interceptor, template exclusion for Data/Sync, remove naive endpoint), Incident B (test 2 → real child-driven sweep, test 4 assertions, narrow the "different fields" claim, comments), Incident C (trap test comment + stamp assert, Lines lookup by Description, redundant line 67, comments at 34/56, standalone INCIDENT-C.md).
+- Week 3 feedback: done (above).
